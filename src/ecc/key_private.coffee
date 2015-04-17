@@ -5,6 +5,7 @@ class PrivateKey
     secp256k1 = require('ecurve').getCurveByName 'secp256k1'
     BigInteger = require 'bigi'
     {PublicKey} = require './key_public'
+    {Aes} = require './aes'
     base58 = require 'bs58'
     hash = require './hash'
     assert = require 'assert'
@@ -56,13 +57,29 @@ class PrivateKey
     toBuffer: ->
         @d.toBuffer()
         
+    ###* {return} Buffer S, 15 bytes ###
     sharedSecret: (public_key) ->
         ot_pubkey = public_key.toBuffer()
-        ecies = new ECIES.encryptObj ot_pubkey, new Buffer(''), @toBuffer()
+        #ecies = new ECIES.encryptObj ot_pubkey, new Buffer(''), @toBuffer()
+        #S = ecies.getSfromPubkey()
+        ecies = new ECIES()
+        ecies.KB = ot_pubkey
+        ecies.r = @toBuffer()
         S = ecies.getSfromPubkey()
-        ECIES.kdf(S)
+
+    get_shared_secret:(public_key)->
+        @sharedSecret public_key.toUncompressed()
     
-    ### <HEX> ###
+    sharedAes: (public_key) ->
+        S = @get_shared_secret public_key
+        Aes.fromSharedSecret_ecies S
+        
+    ### <helper_functions> ###
+    
+    toByteBuffer: () ->
+        b = new ByteBuffer(ByteBuffer.DEFAULT_CAPACITY, ByteBuffer.LITTLE_ENDIAN)
+        @appendByteBuffer(b)
+        b.copy 0, b.offset
     
     PrivateKey.fromHex = (hex) ->
         PrivateKey.fromBuffer new Buffer hex, 'hex'
@@ -70,6 +87,6 @@ class PrivateKey
     toHex: ->
         @toBuffer().toString 'hex'
         
-    ### </HEX> ###
+    ### </helper_functions> ###
 
 exports.PrivateKey = PrivateKey

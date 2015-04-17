@@ -1,3 +1,11 @@
+
+### Until fixed, Off to avoid core dumping bitshares_client
+RPC port core dump
+A unit test that runs several RPC commands in the same connection (example: id:1, id:2, ..) quickly triggered a core dump of bitshares_client on ubuntu.  This is intermittent but did not take long.  
+###
+quicky = on
+EC = require('../../src/common/exceptions').ErrorWithCause
+
 class RpcJson
 
     q = require 'q'
@@ -44,8 +52,47 @@ class RpcJson
             console.log "Connection closed" if @debug
             @defer_connection = null
 
+    request:(method, parameters)->
+        defer = q.defer()
+        try
+            @run(method, parameters).then(
+                (result)->
+                    #console.log '... result',JSON.stringify result
+                    defer.resolve result:result
+                (error)->
+                    # EC creates another stack trace so we can find
+                    # the caller of this request method.  The error object
+                    # is the remote code's stack trace.
+                    #error = new EC 'JSON Rpc Error', error
+                    console.log '... error',JSON.stringify error
+                    defer.reject error
+            ).done()
+        catch e
+            console.log 'dead ex handler?',e
+        defer.promise
+    
     run: (method, parameters) ->
+        throw new Error 'no connection' unless @defer_connection
         
+        if not quicky and Object.keys(@defer_request).length isnt 0
+            defer = q.defer()
+            _check= =>
+                #console.log 'quicky',Object.keys(@defer_request).length
+                unless Object.keys(@defer_request).length is 0
+                    setTimeout _check, 100
+                    return
+                    
+                promise = @run method, parameters
+                promise.then(
+                    (response)->
+                        defer.resolve response
+                    (reject)->
+                        defer.reject reject
+                )
+                return
+            setTimeout _check, 100
+            return defer.promise
+                
         # convert multiple lines into an array
         multi_cmd = method.trim().split '\n'
         method = multi_cmd if multi_cmd.length > 1

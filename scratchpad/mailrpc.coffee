@@ -13,14 +13,14 @@ Mail = _Mail.Mail
 Email = _Mail.Email
 EncryptedMail = _Mail.EncryptedMail
 
-{Rpc} = require "./rpc_json"
+{Rpc} = require "../test/lib/rpc_json"
 {RpcCommon} = require "./rpc_common"
 
 ByteBuffer = require 'bytebuffer'
 common = require "../src/common"
 q = require 'q'
 
-@rpc=new Rpc(on, RPC_PORT, "localhost", "test", "test")
+@rpc=new Rpc(debug=on, RPC_PORT, "localhost", "test", "test")
 @rpc_common=new RpcCommon(@rpc)
 
 class TestNet
@@ -87,11 +87,26 @@ class MailTest
         open default
         unlock 9999 Password00
         
-        mail_send delegate0 delegate1 subject body
-        wallet_set_preferred_mail_servers "delegate0"  ["delegate1"] "delegate0"
+        # wallet_account_update_registration ....
         
+        enable mail server in config.json
+        
+        
+        # All accounts default to init0 as there mail server
+        wallet_account_create init0
+        wallet_account_register init0 delegate0 {"mail_server_endpoint":"127.0.0.1:45000"}
+        
+        transfer 1 XTS delegate0 delegate1 "my memo" vote_random # mail transaction notice
+        mail_send delegate0 delegate1 subject body
+        
+        #retry if needed
         blockchain_get_account delegate0
         blockchain_get_account delegate1
+        blockchain_get_account init0
+        mail_get_processing_messages
+        mail_retry_send 09af...
+        mail_check_new_messages
+        mail_inbox
         ###
         
         # Setup for this>>> mail_send delegate0 delegate1 subject body
@@ -132,14 +147,14 @@ class MailTest
         ###
         
         aes = Aes.fromSecret 'Password00'
-        otk_private = PrivateKey.fromHex aes.decrypt_hex msg.otk_encrypted
+        otk_private = PrivateKey.fromHex aes.decryptHex msg.otk_encrypted
         otk_public_compressed = otk_private.toPublicKey()
         console.log 'otk\t',otk_public_compressed.toBtsPublic()
         otk_public_uncompressed = otk_public_compressed.toUncompressed()
         
-        d0_private = PrivateKey.fromHex aes.decrypt_hex  msg.delegate0_private_key_encrypted
+        d0_private = PrivateKey.fromHex aes.decryptHex  msg.delegate0_private_key_encrypted
         
-        d1_private = PrivateKey.fromHex aes.decrypt_hex  msg.delegate1_private_key_encrypted
+        d1_private = PrivateKey.fromHex aes.decryptHex  msg.delegate1_private_key_encrypted
         
         # blockchain::address
         delegate0 = "XTS8DvGQqzbgCR5FHiNsFf8kotEXr8VKD3mR"
@@ -152,12 +167,12 @@ class MailTest
         
         encrypted_mail = ->
             S = d1_private.sharedSecret otk_public_uncompressed
-            aes = Aes.fromSha512 S.toString('hex')
+            aes = Aes.fromSharedSecret_ecies S
             recipient = d1_private.toPublicKey().toBlockchainAddress()
             #console.log "recipient\t",recipient.toString('hex')
             Mail mail = new Mail 'email', recipient, {low: 1234}, new Date(), email.toBuffer()
             mail_hex = mail.toHex()
-            cipher_hex = aes.encrypt_hex mail_hex
+            cipher_hex = aes.encryptHex mail_hex
             #console.log "cipher_hex\t",cipher_hex
             cipher_buffer = new Buffer(cipher_hex, 'hex')
             new EncryptedMail otk_public_compressed, cipher_buffer
@@ -228,8 +243,8 @@ Test = =>
 
     m=new MailTest(@rpc, @rpc_common)
     #m.send()
-    m.configure_mail_servers()
-    #m.mail_store_message()
+    #m.configure_mail_servers()
+    m.mail_store_message()
     #m.mail_store_message msg
     
     #m.processing_cancel_all()

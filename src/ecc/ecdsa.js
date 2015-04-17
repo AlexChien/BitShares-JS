@@ -1,4 +1,4 @@
-var assert = require('assert') // Copied from https://github.com/bitcoinjs/bitcoinjs-lib
+var assert = require('assert') // from github.com/bitcoinjs/bitcoinjs-lib from github.com/cryptocoinjs/ecdsa
 var crypto = require('./hash')
 var enforceType = require('./types')
 
@@ -6,9 +6,14 @@ var BigInteger = require('bigi')
 var ECSignature = require('./ecsignature')
 
 // https://tools.ietf.org/html/rfc6979#section-3.2
-function deterministicGenerateK(curve, hash, d) {
+function deterministicGenerateK(curve, hash, d, nonce) {
+  
   enforceType('Buffer', hash)
   enforceType(BigInteger, d)
+  
+  if (nonce) {
+    hash = crypto.sha256(Buffer.concat([hash, new Buffer(nonce)]))
+  }
 
   // sanity check
   assert.equal(hash.length, 32, 'Hash must be 256 bit')
@@ -50,10 +55,11 @@ function deterministicGenerateK(curve, hash, d) {
   }
 
   return T
-}
 
-function sign(curve, hash, d) {
-  var k = deterministicGenerateK(curve, hash, d)
+}
+// bitshares-js using nonce to find canonically valid signature
+function sign(curve, hash, d, nonce) {
+  var k = deterministicGenerateK(curve, hash, d, nonce)
 
   var n = curve.n
   var G = curve.G

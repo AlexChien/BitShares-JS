@@ -6,7 +6,9 @@ class Aes
     hash = require("./hash")
 
     constructor: (@iv, @key) ->
-
+    clear:->@iv = @key = undefined
+    
+    # TODO arg should be a 64 byte buffer
     Aes.fromSha512 = (hash) ->
         assert.equal hash.length, 128, "A Sha512 in HEX should be 128 characters long, instead got #{hash.length}"
         #https://github.com/InvictusInnovations/fc/blob/978de7885a8065bc84b07bfb65b642204e894f55/src/crypto/aes.cpp#L330
@@ -16,12 +18,16 @@ class Aes
         new Aes(iv, key)
 
     Aes.fromSecret = (password) ->
-        assert password, true, "password is required"
-        pw_hash = hash.sha512 password
-        pw_hash = pw_hash.toString('hex')
-        Aes.fromSha512(pw_hash)
+        assert password, "password is required"
+        _hash = hash.sha512 password
+        _hash = _hash.toString('hex')
+        Aes.fromSha512(_hash)
+        
+    Aes.fromSharedSecret_ecies = (S) ->
+        assert S, "Shared secret is required"
+        Aes.fromSha512 hash.sha512(S).toString('hex')
 
-    decrypt_word_array: (cipher) ->
+    _decrypt_word_array: (cipher) ->
         # https://code.google.com/p/crypto-js/#Custom_Key_and_IV
         # see wallet_records.cpp master_key::decrypt_key
         CryptoJS.AES.decrypt(
@@ -31,25 +37,39 @@ class Aes
           iv: @iv
         )
     
-    encrypt_word_array: (plaintext) ->
+    _encrypt_word_array: (plaintext) ->
         #https://code.google.com/p/crypto-js/issues/detail?id=85
         cipher = CryptoJS.AES.encrypt plaintext, @key, {iv: @iv}
         CryptoJS.enc.Base64.parse cipher.toString()
 
-    ### <HEX> ###
+    decrypt: (cipher_buffer) ->
+        assert cipher_buffer, "Missing cipher text"
+        # hex is the only common format
+        hex = @decryptHex(cipher_buffer.toString('hex'))
+        new Buffer(hex, 'hex')
+        
+    encrypt: (plaintext_buffer) ->
+        #assert plaintext_buffer, "Missing plain text"
+        # hex is the only common format
+        hex = @encryptHex(plaintext_buffer.toString('hex'))
+        new Buffer(hex, 'hex')
+
+    ### <helper_functions> ###
     
-    decrypt_hex: (cipher) ->
+    decryptHex: (cipher) ->
+        assert cipher, "Missing cipher text"
         # Convert data into word arrays (used by Crypto)
         cipher_array = CryptoJS.enc.Hex.parse cipher
-        plainwords = @decrypt_word_array cipher_array
+        plainwords = @_decrypt_word_array cipher_array
         CryptoJS.enc.Hex.stringify plainwords
         
-    encrypt_hex: (plainhex) ->
+    encryptHex: (plainhex) ->
+        #assert plainhex, "Missing plain text"
         plain_array = CryptoJS.enc.Hex.parse plainhex
-        cipher_array = @encrypt_word_array plain_array
+        cipher_array = @_encrypt_word_array plain_array
         CryptoJS.enc.Hex.stringify cipher_array
         
-    ### </HEX> ###
+    ### </helper_functions> ###
 
 exports.Aes = Aes
 

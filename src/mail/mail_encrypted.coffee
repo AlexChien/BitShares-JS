@@ -1,11 +1,6 @@
 assert = require 'assert'
-
-Ecc = require '../ecc'
-PublicKey = Ecc.PublicKey
-
+{PublicKey} = require '../ecc/key_public'
 ByteBuffer = require 'bytebuffer'
-# https://github.com/dcodeIO/ByteBuffer.js/issues/34
-ByteBuffer = ByteBuffer.dcodeIO.ByteBuffer if ByteBuffer.dcodeIO
 
 class EncryptedMail
 
@@ -40,8 +35,8 @@ class EncryptedMail
 
         return new EncryptedMail one_time_key, ciphertext
 
-    toByteBuffer: ->
-        b = new ByteBuffer ByteBuffer.DEFAULT_CAPACITY, ByteBuffer.LITTLE_ENDIAN
+    toByteBuffer: () ->
+        b = new ByteBuffer(ByteBuffer.DEFAULT_CAPACITY, ByteBuffer.LITTLE_ENDIAN)
         b.append @one_time_key.toBuffer().toString('binary'), 'binary'
         b.writeVarint32 @ciphertext.length
         b.append @ciphertext.toString('binary'), 'binary'

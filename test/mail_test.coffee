@@ -6,12 +6,13 @@ Signature = Ecc.Signature
 PrivateKey = Ecc.PrivateKey
 PublicKey = Ecc.PublicKey
 
-_Mail = require '../src/mail'
-Mail = _Mail.Mail
-Email = _Mail.Email
-EncryptedMail = _Mail.EncryptedMail
+mail = require '../src/mail'
+Mail = mail.Mail
+Email = mail.Email
+EncryptedMail = mail.EncryptedMail
 
 ByteBuffer = require 'bytebuffer'
+hash = require '../src/ecc/hash'
 
 ###
 = Buffer verses HEX
@@ -24,26 +25,24 @@ debug readability and complete code coverage.
 
 encrypted_mail_test = (msg) ->
     describe "Encrypted Mail", ->
-        it "Parse and regenerate", ->
+        it "Parse and generate", ->
             encrypted_mail = EncryptedMail.fromHex msg.data
             assert.equal encrypted_mail.toHex(), msg.data
 
     describe "Mail", ->
-        it "Parse and regenerate", ->
+        it "Parse and generate (binary)", ->
             mail = Mail.fromHex msg.decrypted_mail
             assert.equal mail.toHex(), msg.decrypted_mail
-            assert.equal "email", mail.type
-            # TODO, what format is this in?
+            assert.equal "email", mail.type()
             assert.equal msg.msg_recepient, mail.recipient.toString('hex')
             assert.equal 0, mail.nonce.low
             assert.equal 1414509511000, mail.time.getTime()
-            # parses data:
             email = mail.toEmail()
             assert.equal "Subject", email.subject
 
         it "Matching one_time_key", ->
             aes = Aes.fromSecret 'Password00'
-            onetime_private_key = aes.decrypt_hex msg.encrypted_onetime_private_key
+            onetime_private_key = aes.decryptHex msg.encrypted_onetime_private_key
             private_key= PrivateKey.fromHex onetime_private_key
             assert.equal private_key.toHex(), msg.otk_private
             public_key = private_key.toPublicKey()
@@ -51,7 +50,7 @@ encrypted_mail_test = (msg) ->
             public_key = public_key.toUncompressed()
             assert.equal public_key.toHex(), msg.otk_uncompressed
 
-        it "Decrypt", ->
+        it "Decrypt using shared secret", ->
             encrypted_mail = EncryptedMail.fromHex msg.data
             one_time_key = ->
                 one_time_key = encrypted_mail.one_time_key
@@ -60,17 +59,17 @@ encrypted_mail_test = (msg) ->
             aes = ->
                 private_key = PrivateKey.fromHex msg.receiver_private_key
                 assert.equal private_key.toPublicKey().toHex(), msg.receiver_public_key
-                shared_secret = private_key.sharedSecret one_time_key
-                assert.equal shared_secret.toString('hex'), msg.shared_secret
-                Aes.fromSha512 shared_secret.toString('hex')
+                S = private_key.sharedSecret one_time_key
+                assert.equal (hash.sha512(S)).toString('hex'), msg.shared_secret
+                Aes.fromSharedSecret_ecies S
             aes = aes()
-            plaintext = aes.decrypt_hex encrypted_mail.ciphertext.toString 'hex'
+            plaintext = aes.decryptHex encrypted_mail.ciphertext.toString 'hex'
             assert.equal plaintext, msg.decrypted_mail
             mail = Mail.fromHex msg.decrypted_mail
             email = mail.toEmail()
             assert.equal "Subject", email.subject
         
-        it "Encrypt", ->
+        it "Encrypt using shared secret", ->
             encrypted_mail = EncryptedMail.fromHex msg.data
             one_time_key = ->
                 one_time_key = encrypted_mail.one_time_key
@@ -78,10 +77,10 @@ encrypted_mail_test = (msg) ->
             one_time_key = one_time_key()
             aes = ->
                 private_key = PrivateKey.fromHex msg.receiver_private_key
-                shared_secret = private_key.sharedSecret one_time_key
-                Aes.fromSha512 shared_secret.toString('hex')
+                S = private_key.sharedSecret one_time_key
+                Aes.fromSharedSecret_ecies S
             aes = aes()
-            cipher_hex = aes.encrypt_hex msg.decrypted_mail
+            cipher_hex = aes.encryptHex msg.decrypted_mail
             assert.equal encrypted_mail.ciphertext.toString('hex'), cipher_hex
 
 encrypted_mail_test
@@ -104,7 +103,7 @@ encrypted_mail_test
 
 email_test = (msg) ->
     describe "Email", ->
-        it "Parse and regenerate", ->
+        it "Parse and generate (binary)", ->
             Email email = Email.fromHex(msg.hex)
             assert.equal email.toHex(true), msg.hex
             
@@ -121,16 +120,16 @@ email_test = (msg) ->
             assert.equal email.attachments.length, 0, "attachments are not supported"
             assert.equal email.signature.toHex(), msg.signature_hex#, "signature"
 
-        it "Verifiy", ->
+        it "Verify", ->
             # remove the signature
             email_hex = Email.fromHex(msg.hex).toHex(include_signature=false)
-            public_key = PrivateKey.fromHex(msg.private_key_hex).toPublicKey()
+            public_key = PrivateKey.fromHex(msg.private_key_sender_hex).toPublicKey()
             signature = Signature.fromHex msg.signature_hex
             verify = signature.verifyHex email_hex, public_key
             assert.equal verify, true, "signature did not verify"
         
         it "Sign & Verify", ->
-            private_key = PrivateKey.fromHex(msg.private_key_hex)
+            private_key = PrivateKey.fromHex(msg.private_key_sender_hex)
             email = Email.fromHex(msg.hex)
             email_hex = email.toHex(include_signature=false)
             signature = Signature.signHex email_hex, private_key
@@ -148,5 +147,5 @@ email_test
     reply_to_hex: "0000000000000000000000000000000000000000"
     attachments: []
     signature_hex: "1fef84ce41ed1ef17d7541845d0e5ef506f2a94c651c836e53dde7621fda8897890f0251e1f6dbc0e713b41f13e73c2cf031aea2e888fe54f3bd656d727a83fddb"
-    private_key_hex: "52173306ca0f862e8fbf8e7479e749b9859fa78588e0e5414ec14fc8ae51a58b"
+    private_key_sender_hex: "52173306ca0f862e8fbf8e7479e749b9859fa78588e0e5414ec14fc8ae51a58b"
     

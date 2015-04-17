@@ -25,22 +25,23 @@ function init {
   then
     if [ -z "$GDB" ]
     then
-        sleep 3
+        sleep 10
     else
         sleep 10
     fi
     echo "Login..."
     # the process may be gone, re-indexing, etc. just error silently
     rpc open '"default"' > /dev/null 2>&1
-    rpc unlock '9999, "Password00"' > /dev/null 2>&1
+    rpc unlock '99999, "Password00"' > /dev/null 2>&1
   else
-    sleep 3
+    sleep 10
     echo "Creating default wallet..."
     rpc wallet_backup_restore '"'$BTS_JS'/testnet/config/wallet.json", "default", "Password00"'
   fi
+  rpc wallet_delegate_set_block_production '"ALL", "true"'
   for i in $(seq 0 100)
-  do
-    rpc wallet_delegate_set_block_production '"delegate'$i'", "true"'
+  do 
+    rpc wallet_publish_price_feed '"delegate'$i'","0.01", "USD"'
   done
 }
 init&
@@ -48,7 +49,7 @@ init&
 set -o xtrace
 
 ${GDB-} \
-"${BTS_BUILD}/programs/client/bitshares_client"\
+"${BTS_BUILD}/programs/client/bitsharestestnet_client"\
  --data-dir "$testnet_datadir"\
  --genesis-config "$BTS_JS/testnet/config/genesis.json"\
  --server\
